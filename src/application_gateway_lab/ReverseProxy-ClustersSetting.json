@@ -1,0 +1,27 @@
+{
+  "ReverseProxy": {
+    "Clusters": {
+      "default-cluster": {
+        "Destinations": {
+          "first_destination": {
+            "Address": "https://localhost:7273"
+          }
+        }
+      },
+      "sample-spa-cluster": {
+        "Destinations": {
+          "first_destination": {
+            "Address": "https://localhost:44490"
+          }
+        }
+      },
+      "sample-api-cluster": {
+        "Destinations": {
+          "first_destination": {
+            "Address": "https://localhost:7030"
+          }
+        }
+      }
+    }
+  }
+}

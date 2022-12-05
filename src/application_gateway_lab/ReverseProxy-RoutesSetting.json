@@ -1,0 +1,45 @@
+{
+  "ReverseProxy": {
+    "Routes": {
+      "default-route": {
+        "ClusterId": "default-cluster",
+        "AuthorizationPolicy": "Default",
+        "CorsPolicy": "CorsPolicy",
+        "Match": {
+          "Path": "{**catchall}"
+        }
+      },
+      "sample-spa-route": {
+        "ClusterId": "sample-spa-cluster",
+        "AuthorizationPolicy": "Default",
+        "CorsPolicy": "CorsPolicy",
+        "Match": {
+          "Path": "/sample/{**catchall}"
+        }
+      },
+      "sample-api-route": {
+        "ClusterId": "sample-api-cluster",
+        "AuthorizationPolicy": "Default",
+        "CorsPolicy": "CorsPolicy",
+        "Match": {
+          "Path": "/backend/api/{**catchall}"
+        },
+        "Transforms": [
+          {
+            "PathRemovePrefix": "/backend"
+          },
+          {
+            "RequestHeaderRemove": "Cookie"
+          },
+          {
+            "X-Forwarded": "Append",
+            "For": "Append",
+            "Proto": "Append",
+            "Prefix": "Append",
+            "Host": "Append"
+          }
+        ]
+      }
+    }
+  }
+}
