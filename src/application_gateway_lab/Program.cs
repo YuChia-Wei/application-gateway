@@ -1,41 +1,30 @@
-using System.Net.Http.Headers;
-using System.Reflection;
+using System.Security.Claims;
+using System.Text.Json;
+using application_gateway_lab.Infrastructure;
 using application_gateway_lab.Infrastructure.Options;
 using application_gateway_lab.Infrastructure.TicketStore;
-using HealthChecks.Prometheus.Metrics;
-using HealthChecks.UI.Client;
+using application_gateway_lab.Infrastructure.YarpComponents.TransformProviders;
+using IdentityModel;
 using IdentityModel.Client;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
-using Serilog;
 using StackExchange.Redis;
-using Yarp.ReverseProxy.Transforms;
+using Yarp.ReverseProxy.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host
-       .UseSerilog((context, configuration) =>
-       {
-           configuration.ReadFrom.Configuration(context.Configuration);
-           configuration.Enrich.WithProperty("ApplicationName", Assembly.GetEntryAssembly().GetName().Name);
-           configuration.Enrich.WithProperty("MACHINENAME",
-                                             Environment.GetEnvironmentVariable("MACHINENAME") ??
-                                             Environment.MachineName);
-       })
-       .ConfigureAppConfiguration(o =>
-       {
-           o.AddJsonFile("ReverseProxy-ClustersSetting.json", true, true);
-           o.AddJsonFile("ReverseProxy-RoutesSetting.json", true, true);
-       });
+builder.Configuration
+       .AddJsonFile("ReverseProxy-ClustersSetting.json", true, true)
+       .AddJsonFile("ReverseProxy-RoutesSetting.json", true, true);
 
 var authOptions = AuthOptions.CreateInstance(builder.Configuration);
 
@@ -58,7 +47,7 @@ builder.Services.AddW3CLogging(logging =>
 
     logging.FileSizeLimit = 5 * 1024 * 1024;
     logging.RetainedFileCountLimit = 2;
-    logging.FileName = Assembly.GetEntryAssembly().GetName().Name + Environment.MachineName;
+    logging.FileName = AppDomain.CurrentDomain.FriendlyName + Environment.MachineName;
     logging.FlushInterval = TimeSpan.FromSeconds(2);
 
     //.net 7 new feature
@@ -83,7 +72,7 @@ builder.Services.AddAuthentication(options =>
            options.Cookie.Name = "sample_signin";
            options.Cookie.SameSite = SameSiteMode.None;
 
-           options.SessionStore = new RedisCacheTicketStore(new RedisCacheOptions { Configuration = redisUrl });
+           options.SessionStore = new RedisCacheTicketStore(new RedisCacheOptions {Configuration = redisUrl});
 
            options.Events = new CookieAuthenticationEvents
            {
@@ -102,7 +91,7 @@ builder.Services.AddAuthentication(options =>
                     * 5. expires_at     = access_token 的到期日
                     *
                     * cookieContext.Properties.IssuedUtc = 跟 OAuth Server 進行驗證的時間
-                    * 
+                    *
                     * cookieContext.Properties.ExpiresUtc
                     *   * cookies 有效期的時間
                     *   * 如果 AddOpenIdConnect 裡面有設定 UseTokenLifeTime 的話，這個時間會使用 id_token 的過期時間
@@ -192,7 +181,43 @@ builder.Services.AddAuthentication(options =>
            options.SaveTokens = true;
            options.GetClaimsFromUserInfoEndpoint = true;
 
-           options.TokenValidationParameters = new TokenValidationParameters { NameClaimType = "name" };
+           //設定 token 中的特定欄位解析方式
+           options.TokenValidationParameters = new TokenValidationParameters
+           {
+               // NameClaimType = "name",
+               NameClaimType = JwtClaimTypes.Name,
+               // RoleClaimType = "role"
+               RoleClaimType = JwtClaimTypes.Role
+           };
+
+           // 設定到 user claim 裡面
+           //ref: https://github.com/skoruba/IdentityServer4.Admin/issues/109
+           //ref: https://stackoverflow.com/a/70279411
+           options.Events.OnUserInformationReceived = context =>
+           {
+               // var roleElement = context.User.RootElement.GetProperty("role");
+               var roleElement = context.User.RootElement.GetProperty(JwtClaimTypes.Role);
+
+               var claims = new List<Claim>();
+
+               if (roleElement.ValueKind == JsonValueKind.Array)
+               {
+                   claims.AddRange(roleElement.EnumerateArray()
+                                              .Select(r => new Claim(JwtClaimTypes.Role,
+                                                                     r.GetString() ?? string.Empty)));
+               }
+               else
+               {
+                   claims.Add(new Claim(JwtClaimTypes.Role, roleElement.GetString() ?? string.Empty));
+               }
+
+               if (context.Principal?.Identity is ClaimsIdentity id)
+               {
+                   id.AddClaims(claims);
+               }
+
+               return Task.CompletedTask;
+           };
 
            // OpenIdConnect 套件預設 PKCE = True 以提升安全性
            // options.UsePkce = false; 
@@ -211,20 +236,12 @@ builder.Services
 builder.Services
        .AddReverseProxy()
        .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
-       .AddTransforms(context =>
-       {
-           context.AddRequestTransform(async transformContext =>
-           {
-               // 將 openId 中取得的 Bearer Token 塞到 Header
-               var tokenAsync = await transformContext.HttpContext.GetTokenAsync("access_token");
-               transformContext.ProxyRequest.Headers.Authorization =
-                   new AuthenticationHeaderValue("Bearer", tokenAsync);
-           });
-       });
+       .AddTransforms<AuthorizationTransformProvider>();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto |
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+                               ForwardedHeaders.XForwardedProto |
                                ForwardedHeaders.XForwardedHost;
 });
 
@@ -239,29 +256,12 @@ if (app.Environment.IsDevelopment())
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders =
-        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto |
+        ForwardedHeaders.XForwardedHost
 });
 
-app.UseHealthChecks(
-       "/metrics",
-       new HealthCheckOptions
-       {
-           ResponseWriter = PrometheusResponseWriter.WritePrometheusResultText, AllowCachingResponses = false
-       })
-   .UseHealthChecks(
-       "/health",
-       new HealthCheckOptions
-       {
-           ResultStatusCodes =
-           {
-               [HealthStatus.Healthy] = StatusCodes.Status200OK,
-               [HealthStatus.Degraded] = StatusCodes.Status200OK,
-               [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
-           },
-           AllowCachingResponses = false,
-           Predicate = _ => true,
-           ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
-       });
+app.UseHealthChecks("/healthz");
 
 // 攔截 favicon.ico 的路徑，因為 Proxy 的 Route 設定中尚未發現排除特定路徑的設定方式
 app.Map("/favicon.ico", () => "");
@@ -275,6 +275,10 @@ app.UseCors("CorsPolicy");
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.MapGet("/gateway-config",
+           [Authorize("GatewayManager")]([FromServices] IProxyConfigProvider proxyConfig) =>
+           proxyConfig.GetConfig().ToGatewayConfig());
 
 app.MapReverseProxy();
 

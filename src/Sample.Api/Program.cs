@@ -1,5 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Sample.WebApi.Infrastructure.Options;
@@ -42,6 +40,7 @@ app.UseAuthentication();
 
 app.UseAuthorization();
 
-app.MapGet("/api/v1/sample", [Authorize]() => new EmployeeViewModel { EmpId = "sample", EmpName = "sample name " + DateTime.Now });
+app.MapGet("/api/v1/sample",
+           [Authorize]() => new EmployeeViewModel {EmpId = "sample", EmpName = "sample name " + DateTime.Now});
 
 app.Run();
