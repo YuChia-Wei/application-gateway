@@ -67,10 +67,10 @@ autoscaling:
 ports:
   - name: grpc-svc
     port: 8443
-    targetPort: 443
+    targetPort: 8443
   - name: http-status
     port: 8080
-    targetPort: 80
+    targetPort: 8080
 
 # VisualService 中的 http 內部 http request 設定
 httpHeaders:
@@ -129,7 +129,7 @@ probes:
   startupProbe:
     httpGet:
       path: /health
-      port: 80
+      port: 8080
     initialDelaySeconds: 5
     failureThreshold: 3
     periodSeconds: 10
@@ -137,12 +137,12 @@ probes:
   livenessProbe:
     httpGet:
       path: /health
-      port: 80
+      port: 8080
   # 服務就緒狀態檢測
   readinessProbe:
     httpGet:
       path: /health
-      port: 80
+      port: 8080
 
 # 設定容器執行時的參數
 env:
