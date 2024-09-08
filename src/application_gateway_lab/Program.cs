@@ -42,6 +42,8 @@ builder.Services.AddW3CLogging(logging =>
     logging.AdditionalRequestHeaders.Add("x-forwarded-for");
 });
 
+builder.Services.AddHttpClient();
+
 //OAuth
 var opidAuthOptions = OpidAuthOptions.CreateInstance(builder.Configuration);
 
