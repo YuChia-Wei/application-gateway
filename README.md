@@ -18,6 +18,34 @@ Web 專案採用微軟預設範本建立，並調整頁面內容僅留下一個�
 
 > 更詳細的 YARP 設定方式可參照 [官方範例](https://github.com/microsoft/reverse-proxy/tree/main/samples)
 
+# authentication / authorization 相關準備
+
+## redis server (for auth)
+
+```bash
+docker run -d -p 6379:6379 --name local-redis redis
+```
+
+## key clock prepare
+
+### run keycloak
+
+```bash
+docker run -d -p 8080:8080 -p 8443:8443 \
+    -e KEYCLOAK_ADMIN=user \
+    -e KEYCLOAK_ADMIN_PASSWORD=password \
+    quay.io/keycloak/keycloak start-dev
+```
+
+### import test client
+
+client id testing json : [link](./keycloak/test_client.json)
+
+- open clients page
+    ![keycloak-clients-page.png](./img/keycloak-clients-page.png)
+- click import client
+    ![keycloak-clients-import-button.png](./img/keycloak-clients-import-button.png)
+
 # 參考資料
 
 * [Building multiple Progressive Web Apps on the same domain](https://web.dev/building-multiple-pwas-on-the-same-domain/)
