@@ -4,14 +4,14 @@
       "default-cluster": {
         "Destinations": {
           "first_destination": {
-            "Address": "https://localhost:7273"
+            "Address": "http://localhost:4200"
           }
         }
       },
       "sample-spa-cluster": {
         "Destinations": {
           "first_destination": {
-            "Address": "https://localhost:44490"
+            "Address": "http://localhost:4200"
           }
         }
       },
