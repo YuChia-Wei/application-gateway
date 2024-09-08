@@ -20,14 +20,14 @@ builder.Services.AddCors(options =>
 
 //OAuth
 
-//join this, if you need to use 'name' to get user name in jwt
+// join this, if you need to use 'name' to get username in jwt
 // JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Add(JwtRegisteredClaimNames.Name, ClaimTypes.Name);
 // use this in dotnet 8
 // JsonWebTokenHandler.DefaultInboundClaimTypeMap.Add(JwtRegisteredClaimNames.Name, ClaimTypes.Name);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
        .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
        {
-           options.Authority = authOptions.Authority;
+           options.Authority = authOptions.Issuer;
            options.RequireHttpsMetadata = false;
            options.Audience = authOptions.Audience;
        });
@@ -43,6 +43,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/api/v1/sample",
-           [Authorize]() => new EmployeeViewModel {EmpId = "sample", EmpName = "sample name " + DateTime.Now});
+           [Authorize]() => new EmployeeViewModel {Id = "sample", Name = "sample name " + DateTime.Now});
 
 app.Run();

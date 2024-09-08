@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
 
-namespace application_gateway_lab.Infrastructure.TicketStore;
+namespace application_gateway_lab.Infrastructure.Authentication.OpenIdConnect;
 
 /// <summary>
 /// Redis Auth Ticket Store
@@ -11,19 +11,19 @@ namespace application_gateway_lab.Infrastructure.TicketStore;
 /// </summary>
 public class RedisCacheTicketStore : ITicketStore
 {
-    private const string KeyPrefix = "application-gateway-lab_Sample:LoginSession:";
-
     private readonly IDistributedCache _distributedCache;
+    private readonly string _redisMainKey;
 
-    public RedisCacheTicketStore(RedisCacheOptions redisCacheOptions)
+    public RedisCacheTicketStore(string mainKey, string redisServerUrl)
     {
-        this._distributedCache = new RedisCache(redisCacheOptions);
+        this._distributedCache = new RedisCache(new RedisCacheOptions { Configuration = redisServerUrl });
+        this._redisMainKey = mainKey;
     }
 
     public async Task<string> StoreAsync(AuthenticationTicket ticket)
     {
         var guid = Guid.NewGuid();
-        var key = KeyPrefix + guid.ToString();
+        var key = this._redisMainKey + guid;
         await this.RenewAsync(key, ticket);
         return key;
     }
@@ -57,7 +57,7 @@ public class RedisCacheTicketStore : ITicketStore
 
     private static AuthenticationTicket? DeserializeFromBytes(byte[]? source)
     {
-        return source == null ? null : TicketSerializer.Default.Deserialize(source);
+        return source is null ? null : TicketSerializer.Default.Deserialize(source);
     }
 
     private static byte[] SerializeToBytes(AuthenticationTicket source)
